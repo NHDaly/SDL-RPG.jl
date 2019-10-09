@@ -1,4 +1,3 @@
-include("timing.jl")
 include("units.jl")
 import Base.show
 

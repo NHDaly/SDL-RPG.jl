@@ -1,17 +1,11 @@
-module RTS
+module RPG
 
-# IDEAS:
-# 1. An RTS + Clicker combo:
-#   Exponential-scaling game, but shown visually, not just via text. You start
-#    out really tiny, growing your web/nest/city/etc, eventually you see some
-#    enemies and you kill them, all the while expanding and zooming out.
-#   Then you somehow increase the scale of the units you're placing. Maybe you
-#    can combine your on-screen units into a structure, or maybe you literally
-#    group some units and *define* the structure yourself. That would be cool!
-#    It's like emergent scaling or something.
+# NOTES:
 
-using SimpleDirectMediaLayer
+using SimpleDirectMediaLayer, SDLGamesLib
 SDL2 = SimpleDirectMediaLayer
+
+import SDLGamesLib: QuitException, start!, GameTimer, WallTimer, started, elapsed, update!
 
 using ApplicationBuilderAppUtils
 
@@ -32,7 +26,6 @@ end
 
 const assets = "assets" # directory path for game assets relative to pwd().
 
-include("timing.jl")
 include("config.jl")
 include("../assets/configs.jl")
 include("player.jl")
@@ -45,97 +38,6 @@ const kGAME_NAME = "Paddle Battle"
 const kSAFE_GAME_NAME = "PaddleBattle"
 const kBUNDLE_ORGANIZATION = "nhdalyMadeThis"
 
-# -------- Opening a window ---------------
-# Forward reference for @cfunction
-function windowEventWatcher end
-
-# Note: These are all Atomics, since they can be modified by the
-# windowEventWatcher callback, which can run in another thread!
-winWidth, winHeight = Threads.Atomic{Int32}(800), Threads.Atomic{Int32}(600)
-winWidth_highDPI, winHeight_highDPI = Threads.Atomic{Int32}(800), Threads.Atomic{Int32}(600)
-function makeWinRenderer()
-    global winWidth, winHeight, winWidth_highDPI, winHeight_highDPI
-
-    win = SDL2.CreateWindow(kGAME_NAME,
-        Int32(SDL2.WINDOWPOS_CENTERED()), Int32(SDL2.WINDOWPOS_CENTERED()), winWidth[], winHeight[],
-        UInt32(SDL2.WINDOW_ALLOW_HIGHDPI|SDL2.WINDOW_OPENGL|SDL2.WINDOW_FULLSCREEN_DESKTOP|SDL2.WINDOW_SHOWN));
-    SDL2.SetWindowMinimumSize(win, minWinWidth, minWinHeight)
-    SDL2.AddEventWatch(@cfunction(windowEventWatcher, Cint, (Ptr{Nothing}, Ptr{SDL2.Event})), win);
-
-    # Find out how big the created window actually was (depends on the system):
-    winWidth[], winHeight[], winWidth_highDPI[], winHeight_highDPI[] = getWindowSize(win)
-    #cam.w[], cam.h[] = winWidth_highDPI, winHeight_highDPI
-
-    renderer = SDL2.CreateRenderer(win, Int32(-1), UInt32(SDL2.RENDERER_ACCELERATED | SDL2.RENDERER_PRESENTVSYNC))
-    SDL2.SetRenderDrawBlendMode(renderer, UInt32(SDL2.BLENDMODE_BLEND))
-    return win,renderer
-end
-
-# This huge function handles all window events. I believe it needs to be a
-# callback instead of just the regular pollEvent because the main thread is
-# paused while resizing, whereas this callback continues to trigger.
-function windowEventWatcher(data_ptr::Ptr{Cvoid}, event_ptr::Ptr{SDL2.Event})::Cint
-    global winWidth, winHeight, cam, window_paused, renderer, win
-    ev = unsafe_load(event_ptr, 1)
-    ee = ev._Event
-    t = UInt32(ee[4]) << 24 | UInt32(ee[3]) << 16 | UInt32(ee[2]) << 8 | ee[1]
-    t = SDL2.Event(t)
-    if (t == SDL2.WindowEvent)
-        event = unsafe_load( Ptr{SDL2.WindowEvent}(pointer_from_objref(ev)) )
-        winevent = event.event;  # confusing, but that's what the field is called.
-        if (winevent == SDL2.WINDOWEVENT_RESIZED || winevent == SDL2.WINDOWEVENT_SIZE_CHANGED)
-            curPaused = window_paused[]
-            window_paused[] = 1  # Stop game playing so resizing doesn't cause problems.
-            winID = event.windowID
-            eventWin = SDL2.GetWindowFromID(winID);
-            if (eventWin == data_ptr)
-                w,h,w_highDPI,h_highDPI = getWindowSize(eventWin)
-                winWidth[], winHeight[] = w, h
-                winWidth_highDPI[], winHeight_highDPI[] = w_highDPI, h_highDPI
-                cam.w[], cam.h[] = winWidth[], winHeight[]
-                recenterButtons!()
-            end
-            # Note: render after every resize event. I tried limiting it with a
-            # timer, but it's hard to tune (too infrequent and the screen
-            # blinks) & it didn't seem to reduce cpu significantly.
-            render(sceneStack[end], renderer, eventWin)
-            SDL2.GL_SwapWindow(eventWin);
-            window_paused[] = curPaused  # Allow game to resume now that resizing is done.
-        elseif (winevent == SDL2.WINDOWEVENT_FOCUS_LOST || winevent == SDL2.WINDOWEVENT_HIDDEN || winevent == SDL2.WINDOWEVENT_MINIMIZED)
-            # Stop game playing so resizing doesn't cause problems.
-            if !debug  # For debug builds, allow editing while playing
-                window_paused[] = 1
-            end
-        elseif (winevent == SDL2.WINDOWEVENT_FOCUS_GAINED || winevent == SDL2.WINDOWEVENT_SHOWN)
-            window_paused[] = 0
-        end
-        # Note that window events pause the game, so at the end of any window
-        # event, restart the timer so it doesn't have a HUGE frame.
-        start!(timer)
-    end
-    return 0
-end
-
-function getWindowSize(win)
-    w,h,w_highDPI,h_highDPI = Int32[0],Int32[0],Int32[0],Int32[0]
-    SDL2.GetWindowSize(win, w, h)
-    SDL2.GL_GetDrawableSize(win, w_highDPI, h_highDPI)
-    return w[],h[],w_highDPI[],h_highDPI[]
-end
-
-# Having a QuitException is useful for testing, since an exception will simply
-# pause the interpreter. For release builds, the catch() block will call quitSDL().
-struct QuitException <: Exception end
-
-function quitSDL(win)
-    # Need to close the callback before quitting SDL to prevent it from hanging
-    # https://github.com/n0name/2D_Engine/issues/3
-    SDL2.DelEventWatch(cfunction(windowEventWatcher, Cint, Tuple{Ptr{Cvoid}, Ptr{SDL2.Event}}), win);
-    SDL2.Mix_CloseAudio()
-    SDL2.TTF_Quit()
-    SDL2.Quit()
-end
-
 # -------------- Game ------------------------------
 
 # Game State Globals
@@ -145,17 +47,13 @@ p2 = Player()
 cam = nothing
 scoreA = 0
 scoreB = 0
-paused_ = true # start paused to show the initial menu.
-paused = Ref(paused_)
-window_paused = Threads.Atomic{UInt8}(0) # Whether or not the game should be running (if lost focus)
-game_started_ = true # start paused to show the initial menu.
-game_started = Ref(game_started_)
-playing_ = true
-playing = Ref(playing_)
+paused = Ref(true) # start paused to show the initial menu.
+game_started = Ref(true)
+playing = Ref(true)
 debugText = false
 audioEnabled = true
 last_10_frame_times = [1.]
-timer = WallTimer()
+timer = SDLGamesLib.frame_timer
 i = 1
 
 sceneStack = []  # Used to keep track of the current scene
@@ -185,7 +83,7 @@ function runSceneGameLoop(scene, renderer, win, inSceneVar::Ref{Bool})
     start!(timer)
     while (inSceneVar[])
         # Don't run if game is paused by system (resizing, lost focus, etc)
-        while window_paused[] != 0  # Note that this will be fixed by windowEventWatcher
+        while SDLGamesLib.window_paused[] != 0  # Note that this will be fixed by windowEventWatcher
             _ = pollEvent!()
             sleep(0.5)  # maybe increase this?
         end
@@ -259,13 +157,13 @@ function getEventType(e::Array{UInt8})
     bitcat(UInt32, e[4:-1:1])
 end
 function getEventType(e::SDL2.Event)
-    e._Event[1]
+    bitcat(UInt32, e[4:-1:1])
 end
 
-function bitcat(outType::Type{T}, arr)::T where T<:Number
-    out = zero(outType)
+function bitcat(::Type{T}, arr)::T where T<:Number
+    out = zero(T)
     for x in arr
-        out = out << sizeof(x)*8
+        out = out << T(sizeof(x)*8)
         out |= convert(T, x)  # the `convert` prevents signed T from promoting to Int64.
     end
     out
@@ -288,7 +186,8 @@ function handleEvents!(scene::GameScene, e,t)
     elseif (t == SDL2.MOUSEWHEEL); handleMouseScroll(e)
     #elseif (t == SDL2.MOUSEBUTTONUP || t == SDL2.MOUSEBUTTONDOWN)
     #elseif (t == SDL2.MOUSEMOTION); handleMousePan(e)
-    elseif (t == SDL2.QUIT);  playing[] = false;
+    elseif (t == SDL2.QUIT)
+        playing[] = false;
     end
 
 
@@ -728,7 +627,7 @@ function game_main(ARGS)
         #load_prefs_backup()
         load_audio_files()
         music = SDL2.Mix_LoadMUS( "$assets/music.wav" );
-        win,renderer = makeWinRenderer()
+        win,renderer = SDLGamesLib.makeWinRenderer(kGAME_NAME)
         global paused,game_started; paused[] = true; game_started[] = false;
         # Warm up
         for i in 1:3
@@ -747,7 +646,7 @@ function game_main(ARGS)
         runSceneGameLoop(scene, renderer, win, playing)
     catch e
         if isa(e, QuitException)
-            quitSDL(win)
+            SDLGamesLib.quitSDL(win)
         else
             rethrow()  # Every other kind of exception
         end
@@ -758,6 +657,6 @@ Base.@ccallable function julia_main(ARGS::Vector{String})::Cint
     game_main(ARGS)
 end
 
-#julia_main([""])  # no julia_main if currently compiling.
+# julia_main([""])  # no julia_main if currently compiling.
 
 end

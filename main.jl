@@ -1,3 +1,3 @@
-using RTS
+using RPG
 
-RTS.julia_main([""])
+RPG.julia_main([""])
