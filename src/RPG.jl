@@ -5,7 +5,8 @@ module RPG
 using SimpleDirectMediaLayer, SDLGamesLib
 SDL2 = SimpleDirectMediaLayer
 
-import SDLGamesLib: QuitException, start!, GameTimer, WallTimer, started, elapsed, update!
+import SDLGamesLib: QuitException, start!, GameTimer, WallTimer, started, elapsed, update!,
+    pollEvent!, bitcat, unitVec
 
 using ApplicationBuilderAppUtils
 
@@ -96,7 +97,7 @@ function runSceneGameLoop(scene, renderer, win, inSceneVar::Ref{Bool})
             hadEvents = true
             while hadEvents
                 e,hadEvents = pollEvent!()
-                t = getEventType(e)
+                t = SDLGamesLib.getEventType(e)
                 handleEvents!(scene,e,t)
             end
         catch e
@@ -145,30 +146,6 @@ function performUpdates!(scene, dt) end  # default
 
 # ------------------------------------------
 
-function pollEvent!()
-    #SDL2.Event() = [SDL2.Event(NTuple{56, Uint8}(zeros(56,1)))]
-    SDL_Event() = Array{UInt8}(zeros(56))
-    e = SDL_Event()
-    success = (SDL2.PollEvent(e) != 0)
-    return e,success
-end
-function getEventType(e::Array{UInt8})
-    # HAHA This is still pretty janky, but I guess that's all you can do w/ unions.
-    bitcat(UInt32, e[4:-1:1])
-end
-function getEventType(e::SDL2.Event)
-    bitcat(UInt32, e[4:-1:1])
-end
-
-function bitcat(::Type{T}, arr)::T where T<:Number
-    out = zero(T)
-    for x in arr
-        out = out << T(sizeof(x)*8)
-        out |= convert(T, x)  # the `convert` prevents signed T from promoting to Int64.
-    end
-    out
-end
-
 function renderFPS(renderer,last_10_frame_times)
     fps = Int(floor(1.0/mean(last_10_frame_times)))
     txt = "FPS: $fps"
@@ -178,7 +155,92 @@ end
 # -------------- Game Scene ---------------------
 struct GameScene end
 
-curFoodParticles = []
+module P
+using ..RPG: WorldPos, SDL2, Vector2D, unitVec
+mutable struct Character
+    health::Int
+    color::SDL2.Color
+    pos::WorldPos
+    Character(health, color, pos) = new(health, color, pos,)
+    #                                    # movement
+    #                                    true, pos, pos)
+    #
+    ## Movement
+    #resting::Bool
+    #nextPos::WorldPos
+    #lastPos::WorldPos
+end
+
+const a = P.Character(10, SDL2.Color(0xff,0,0,0xff), WorldPos( 0,0))
+const b = P.Character(10, SDL2.Color(0,0xff,0,0xff), WorldPos(-1,0))
+const c = P.Character(10, SDL2.Color(0,0,0xff,0xff), WorldPos(-2,0))
+
+party = [a,b,c]
+#paths = [Vector2D(0,0), [unitVec(P.party[i].pos - P.party[i+1].pos) for i in 1:length(P.party)-1]...]
+end
+
+function follow_along(move)
+    #step1(move)
+    #@async begin sleep(1); update_characters()
+    #    step2(); sleep(1); update_characters()
+    #    step3(); sleep(1); update_characters()
+    #    step4();
+    #end
+    @async begin
+        #paths = copy(P.paths)
+        #@info "start paths: $paths"
+        #paths .+= [move, [P.paths[i] for i in 1:length(P.paths)-1]...]
+        #@info "new paths: $paths"
+        paths = [move, [unitVec(P.party[i].pos - P.party[i+1].pos) for i in 1:length(P.party)-1]...]
+        p = copy(P.party)
+
+        p[1].pos += paths[1];  sleep(1)
+        # 1 rests, 2 catches up
+                              p[2].pos += paths[2]; sleep(1)
+        # Cascade begins
+        P.party[:] = circshift(P.party, -1);  # shift party
+        p[1].pos -= paths[1]; p[2].pos += paths[1]; p[3].pos += paths[3];  sleep(1)
+        p[1].pos -= paths[2];                       p[3].pos += paths[2];  sleep(1)
+    end
+end
+
+#function update_characters()
+#    for p in P.party[1:end]
+#        if p.resting
+#            # Skip this round
+#            p.resting = false
+#        else
+#            p.pos, p.lastPos = p.nextPos, p.pos
+#        end
+#    end
+#end
+#function step1(move)
+#    lastPos = P.party[1].pos
+#    # attack
+#    P.party[1].pos += move
+#    P.party[1].resting = true
+#    # set targets
+#    P.party[2].nextPos = lastPos
+#    P.party[2].resting = false
+#end
+#function step2()
+#    P.party[1].nextPos = P.party[2].pos
+#    # set targets
+#    P.party[2].nextPos = P.party[1].pos
+#    for i in 3:length(P.party)
+#        P.party[i].nextPos = P.party[i-1].lastPos
+#    end
+#end
+#function step3()
+#    P.party[1].nextPos = P.party[3].pos
+#    # set targets
+#    P.party[3].nextPos = P.party[1].pos
+#end
+#function step4()
+#    P.party[:] = circshift(P.party, -1)
+#end
+
+
 function handleEvents!(scene::GameScene, e,t)
     global playing,paused
     # Handle Events
@@ -198,6 +260,10 @@ function handleEvents!(scene::GameScene, e,t)
     end
 end
 function handleMouseScroll(e)
+    #SDLGamesLib.zoomFromMouseScroll(e, cam)
+    zoomFromMouseScroll(e, cam)
+end
+function zoomFromMouseScroll(e, cam)
     my = bitcat(SDL2.Sint32, e[24:-1:21])
 
     # TODO: move cam based on mouse pos during scroll
@@ -226,33 +292,38 @@ end
 #    end
 #end
 
+const K_ARROW_KEYS = (SDL2.SDLK_RIGHT, SDL2.SDLK_LEFT, SDL2.SDLK_UP, SDL2.SDLK_DOWN)
 function handleGameKeyPress(e,t)
     global paused,debugText
     keySym = getKeySym(e)
     keyDown = (t == SDL2.KEYDOWN)
     keyRepeat = (getKeyRepeat(e) != 0)
-    println("repeat: $(getKeyRepeat(e))")
 
-    if (keySym == keySettings[:keyP1Collector])
-        buyCollector(p1)
-    elseif (keySym == keySettings[:keyP2Collector])
-        buyCollector(p2)
-    elseif (keySym == keySettings[:keyP1Fighter])
-        buyFighter(p1)
-    elseif (keySym == keySettings[:keyP2Fighter])
-        buyFighter(p2)
-    elseif (keySym == keySettings[:keyP1Attack] && keyDown && !keyRepeat)
-        attackToggle(p2, p1)
-    elseif (keySym == keySettings[:keyP2Attack] && keyDown && !keyRepeat)
-        attackToggle(p1, p2)
-    elseif (keySym == SDL2.SDLK_RIGHT)
-        cam.pos += Vector2D(kCamPanRate,0)
-    elseif (keySym == SDL2.SDLK_LEFT)
-        cam.pos += Vector2D(-kCamPanRate,0)
-    elseif (keySym == SDL2.SDLK_UP)
-        cam.pos += Vector2D(0,kCamPanRate)
-    elseif (keySym == SDL2.SDLK_DOWN)
-        cam.pos += Vector2D(0,-kCamPanRate)
+#    if (keySym == keySettings[:keyP1Collector])
+#        buyCollector(p1)
+#    elseif (keySym == keySettings[:keyP2Collector])
+#        buyCollector(p2)
+#    elseif (keySym == keySettings[:keyP1Fighter])
+#        buyFighter(p1)
+#    elseif (keySym == keySettings[:keyP2Fighter])
+#        buyFighter(p2)
+#    elseif (keySym == keySettings[:keyP1Attack] && keyDown && !keyRepeat)
+#        attackToggle(p2, p1)
+#    elseif (keySym == keySettings[:keyP2Attack] && keyDown && !keyRepeat)
+#        attackToggle(p1, p2)
+    if keyDown && keySym ∈ K_ARROW_KEYS
+        if false
+        elseif (keySym == SDL2.SDLK_RIGHT)
+            move = Vector2D(1,0)
+        elseif (keySym == SDL2.SDLK_LEFT)
+            move = Vector2D(-1,0)
+        elseif (keySym == SDL2.SDLK_UP)
+            move = Vector2D(0,1)
+        elseif (keySym == SDL2.SDLK_DOWN)
+            move = Vector2D(0,-1)
+        end
+
+        follow_along(move)
     else
         # Fallback
         handlePauseKeyPress(e,t)
@@ -273,12 +344,16 @@ function render(scene::GameScene, renderer, win)
 
     #renderFoodParticles(cam,renderer, curFoodParticles)
 
-    for u in p1.units.units
-        render(u, kP1Color, cam, renderer)
+    box = WorldDims(0.8, 0.8)
+    for p in P.party
+        renderRectCentered(cam, renderer, p.pos, box, p.color)
     end
-    for u in p2.units.units
-        render(u, kP2Color, cam, renderer)
-    end
+    #for u in p1.units.units
+    #    render(u, kP1Color, cam, renderer)
+    #end
+    #for u in p2.units.units
+    #    render(u, kP2Color, cam, renderer)
+    #end
 
 
     # UI text at bottom
@@ -322,8 +397,9 @@ function performUpdates!(scene::GameScene, dt)
 
     performAttackUpdate!(dt)
 
-    moveCamIfMouseOnEdge!(dt)
+    #moveCamIfMouseOnEdge!(dt)
     #updateFoodParticles(dt)
+    yield()
 end
 
 foodSheetDriftVel = Vector2D(0,0)
@@ -382,8 +458,8 @@ end
 function resetGame()
     global scoreA,scoreB, p1, p2, cam, attackingMap
     cam = Camera(WorldPos(0,0),
-             Threads.Atomic{Float32}(winWidth[]),
-             Threads.Atomic{Float32}(winHeight[]))
+             Threads.Atomic{Float32}(50),
+             Threads.Atomic{Float32}(50))
 
     scoreB = scoreA = 0
     p1 = Player()
