@@ -165,7 +165,7 @@ uuid = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 deps = ["SimpleDirectMediaLayer"]
 path = "/Users/daly/.julia/dev/SDLGamesLib"
 uuid = "09e76198-bdf8-11e9-2e7a-fb315f3da3a4"
-version = "0.1.0"
+version = "0.1.1"
 
 [[SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
