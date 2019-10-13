@@ -8,6 +8,8 @@ SDL2 = SimpleDirectMediaLayer
 import SDLGamesLib: QuitException, start!, GameTimer, WallTimer, started, elapsed, update!,
     pollEvent!, bitcat, unitVec
 
+import Statistics: mean
+
 using ApplicationBuilderAppUtils
 
 # True if this file is being run through the interpreter, and false if being
@@ -186,22 +188,34 @@ function follow_along(move)
     #    step3(); sleep(1); update_characters()
     #    step4();
     #end
+    #@sync begin
     @async begin
         #paths = copy(P.paths)
         #@info "start paths: $paths"
         #paths .+= [move, [P.paths[i] for i in 1:length(P.paths)-1]...]
         #@info "new paths: $paths"
-        paths = [move, [unitVec(P.party[i].pos - P.party[i+1].pos) for i in 1:length(P.party)-1]...]
-        p = copy(P.party)
+        front_id = 1
+        #p = copy(P.party)
+        p = (P.party)
 
-        p[1].pos += paths[1];  sleep(1)
+        old_pos = p[front_id].pos
+        p[front_id].pos += move;  sleep(1)
         # 1 rests, 2 catches up
-                              p[2].pos += paths[2]; sleep(1)
+        old_pos, p[2].pos = p[2].pos, old_pos; sleep(1)
         # Cascade begins
-        P.party[:] = circshift(P.party, -1);  # shift party
-        p[1].pos -= paths[1]; p[2].pos += paths[1]; p[3].pos += paths[3];  sleep(1)
-        p[1].pos -= paths[2];                       p[3].pos += paths[2];  sleep(1)
+        function swap_chars(p_a, p_b)
+            p[p_a].pos, p[p_b].pos = p[p_b].pos, p[p_a].pos  # swap positions
+            p[p_a],     p[p_b]     = p[p_b],     p[p_a]  # swap place in party
+        end
+        swap_chars(front_id, front_id+1)  # 1 & 2
+        front_id = front_id+1
+        old_pos, p[3].pos = p[3].pos, old_pos; sleep(1)  # bump back
+
+        swap_chars(front_id, front_id+1)  # 2 & 3
+        #sleep(1)
+        #p[3].pos = old_pos
     end
+#end
 end
 
 #function update_characters()
