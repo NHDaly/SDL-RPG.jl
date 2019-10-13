@@ -176,19 +176,28 @@ end
 const a = P.Character(10, SDL2.Color(0xff,0,0,0xff), WorldPos( 0,0))
 const b = P.Character(10, SDL2.Color(0,0xff,0,0xff), WorldPos(-1,0))
 const c = P.Character(10, SDL2.Color(0,0,0xff,0xff), WorldPos(-2,0))
+const d = P.Character(10, SDL2.Color(0,0xff,0xff,0xff), WorldPos(-3,0))
+const e = P.Character(10, SDL2.Color(0xff,0,0xff,0xff), WorldPos(-4,0))
 
-party = [a,b,c]
-#paths = [Vector2D(0,0), [unitVec(P.party[i].pos - P.party[i+1].pos) for i in 1:length(P.party)-1]...]
+const party = [a,b,c,d,e]
+const ready = Ref(true)
+
+function reset_party()
+    for (i,p) in enumerate(party)
+        p.pos = WorldPos(-i, 0)
+    end
+    party[:] = [a,b,c,d,e]
+end
+reset_party()
+
+const animspeed = 0.75
 end
 
 function follow_along(move)
-    #step1(move)
-    #@async begin sleep(1); update_characters()
-    #    step2(); sleep(1); update_characters()
-    #    step3(); sleep(1); update_characters()
-    #    step4();
-    #end
-    #@sync begin
+    P.ready[] = false  # Lock character movement until the front char has swapped out
+
+    # Note that this is totallllly not thread-safe, and should probably be updated to being
+    # some kind of game-specific event mechanism, or made threadsafe.
     @async begin
         p = P.party
 
@@ -199,17 +208,24 @@ function follow_along(move)
 
         # Bump along like a worm
         @async begin
-            old_pos = p[1].pos;  p[1].pos += move; sleep(1)
-            old_pos, p[2].pos = p[2].pos, old_pos; sleep(1)
-            old_pos, p[3].pos = p[3].pos, old_pos; sleep(1)
+            # Move front character by `move`
+            old_pos = p[1].pos;  p[1].pos += move; sleep(P.animspeed)
+            # Bump the rest along every update
+            for i in 2:length(p)
+                old_pos, p[i].pos = p[i].pos, old_pos; sleep(P.animspeed)
+            end
         end
 
         # Cascade front moving to back
         @async begin
-            front_id = 1 ; sleep(2)  # while the front rests && 2 jumps up
-            swap_chars(front_id, front_id+1)  # 1 & 2
-            front_id = front_id+1 ; sleep(1)
-            swap_chars(front_id, front_id+1)  # 2 & 3
+            # Wait while the front rests && 2nd-place bumps up
+            front_id = 1 ; sleep(2*P.animspeed)
+            P.ready[] = true  # Unlock movement once we've swapped
+            # Then Cascade the front character back through the group
+            for i in 2:length(p)
+                swap_chars(front_id, front_id+1)
+                front_id = front_id+1 ; sleep(P.animspeed)
+            end
         end
     end
 #end
@@ -334,6 +350,9 @@ function handleGameKeyPress(e,t)
             move = Vector2D(0,-1)
         end
 
+        if !P.ready[]
+            return
+        end
         follow_along(move)
     else
         # Fallback
