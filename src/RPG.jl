@@ -190,30 +190,27 @@ function follow_along(move)
     #end
     #@sync begin
     @async begin
-        #paths = copy(P.paths)
-        #@info "start paths: $paths"
-        #paths .+= [move, [P.paths[i] for i in 1:length(P.paths)-1]...]
-        #@info "new paths: $paths"
-        front_id = 1
-        #p = copy(P.party)
-        p = (P.party)
+        p = P.party
 
-        old_pos = p[front_id].pos
-        p[front_id].pos += move;  sleep(1)
-        # 1 rests, 2 catches up
-        old_pos, p[2].pos = p[2].pos, old_pos; sleep(1)
-        # Cascade begins
         function swap_chars(p_a, p_b)
             p[p_a].pos, p[p_b].pos = p[p_b].pos, p[p_a].pos  # swap positions
             p[p_a],     p[p_b]     = p[p_b],     p[p_a]  # swap place in party
         end
-        swap_chars(front_id, front_id+1)  # 1 & 2
-        front_id = front_id+1
-        old_pos, p[3].pos = p[3].pos, old_pos; sleep(1)  # bump back
 
-        swap_chars(front_id, front_id+1)  # 2 & 3
-        #sleep(1)
-        #p[3].pos = old_pos
+        # Bump along like a worm
+        @async begin
+            old_pos = p[1].pos;  p[1].pos += move; sleep(1)
+            old_pos, p[2].pos = p[2].pos, old_pos; sleep(1)
+            old_pos, p[3].pos = p[3].pos, old_pos; sleep(1)
+        end
+
+        # Cascade front moving to back
+        @async begin
+            front_id = 1 ; sleep(2)  # while the front rests && 2 jumps up
+            swap_chars(front_id, front_id+1)  # 1 & 2
+            front_id = front_id+1 ; sleep(1)
+            swap_chars(front_id, front_id+1)  # 2 & 3
+        end
     end
 #end
 end
