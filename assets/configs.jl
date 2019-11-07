@@ -99,3 +99,10 @@ config_reload_time_s = 1  # seconds
 # Code Testing
 #set_health!(p1.units.collectors[2], 5)
 #println(p1.units.collectors[2].health)
+
+knight_dims = (77,59)
+knight_pos = (130,8)
+knight_run_offset = 2
+knight_jump_offset = 3
+knight_anim_delays = [1, 1, 1, 2, 1, 1, 1,] ./ 10
+knight_display_scale = 0.3

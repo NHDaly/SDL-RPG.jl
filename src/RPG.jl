@@ -1,4 +1,4 @@
-module RPG
+module RPG #end
 
 # NOTES:
 
@@ -6,7 +6,7 @@ using SimpleDirectMediaLayer, SDLGamesLib
 SDL2 = SimpleDirectMediaLayer
 
 import SDLGamesLib: QuitException, start!, GameTimer, WallTimer, started, elapsed, update!,
-    pollEvent!, bitcat, unitVec
+    pollEvent!, bitcat, unitVec, leftJustified, rightJustified, render
 
 import Statistics: mean
 
@@ -36,11 +36,13 @@ include("game.jl")
 include("display.jl")
 include("keyboard.jl")
 include("menu.jl")
+include("anim.jl")
 
 const kGAME_NAME = "Paddle Battle"
 const kSAFE_GAME_NAME = "PaddleBattle"
 const kBUNDLE_ORGANIZATION = "nhdalyMadeThis"
 
+SDLGamesLib.set_default_font(defaultFontName, defaultFontSize)
 # -------------- Game ------------------------------
 
 # Game State Globals
@@ -190,7 +192,7 @@ function reset_party()
 end
 reset_party()
 
-const animspeed = 0.75
+const animspeed = 0.5
 end
 
 function follow_along(move)
@@ -373,6 +375,7 @@ function render(scene::GameScene, renderer, win)
     renderScore(renderer)
 
     #renderFoodParticles(cam,renderer, curFoodParticles)
+
 
     box = WorldDims(0.8, 0.8)
     for p in P.party
@@ -634,6 +637,9 @@ end
 
 heartIcon = nothing
 jlLogoIcon = nothing
+knight_run_anim = nothing
+knight_jump_anim = nothing
+knight_attack_anim = nothing
 function render(scene::PauseScene, renderer, win)
     global heartIcon, jlLogoIcon
     if heartIcon == nothing || jlLogoIcon == nothing
@@ -672,6 +678,38 @@ function render(scene::PauseScene, renderer, win)
           fontSize=16)
     render(heartIcon, heartPos, cam, renderer; size=UIPixelDims(16,16))
     render(jlLogoIcon, jlLogoPos, cam, renderer; size=UIPixelDims(16,16))
+
+    global knight_run_anim
+    knight_ss = load_bmp(renderer, "assets/knight_spritesheet.bmp")
+    p, d = ScreenPixelPos(knight_pos...), ScreenPixelDims(knight_dims...)
+    h = Vector2D(knight_dims[1], 0)
+    v = Vector2D(0, knight_dims[2])
+    function make_knight_run_anim()
+        global knight_run_anim = Animation(
+            [ Sprite(knight_ss, p + knight_run_offset*v + i*h, d) for i in 0:6],
+            knight_anim_delays, make_knight_run_anim,)
+    end
+    function make_knight_jump_anim()
+        global knight_jump_anim = Animation(
+            [ Sprite(knight_ss, p + knight_jump_offset*v + i*h, d) for i in 0:6],
+            knight_anim_delays, make_knight_jump_anim,)
+    end
+    function make_knight_attack_anim()
+        global knight_attack_anim = Animation(
+            [ Sprite(knight_ss, p + 4*v + i*h, d) for i in 0:6],
+            knight_anim_delays, make_knight_attack_anim,)
+    end
+    knight_run_anim === nothing && make_knight_run_anim()
+    knight_jump_anim === nothing && make_knight_jump_anim()
+    knight_attack_anim === nothing && make_knight_attack_anim()
+    render(knight_run_anim, screenCenter() + Vector2D(-50,-200), cam, renderer, size=knight_display_scale)
+    render(knight_jump_anim, screenCenter() + Vector2D(50,-200), cam, renderer, size=knight_display_scale)
+    render(knight_attack_anim, screenCenter() + Vector2D(150,-200), cam, renderer, size=knight_display_scale)
+end
+function performUpdates!(scene::PauseScene, dt)
+    update!(knight_run_anim, dt)
+    update!(knight_jump_anim, dt)
+    update!(knight_attack_anim, dt)
 end
 
 clickedButton = nothing
@@ -749,6 +787,7 @@ function game_main(ARGS)
         #println("Preferences file: $(repr(prefsfile))")
         playing[] = paused[] = true
         scene = GameScene()
+
         runSceneGameLoop(scene, renderer, win, playing)
     catch e
         if isa(e, QuitException)
