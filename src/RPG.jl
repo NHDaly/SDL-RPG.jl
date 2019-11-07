@@ -38,6 +38,9 @@ include("keyboard.jl")
 include("menu.jl")
 include("anim.jl")
 
+using .Animations
+using .Animations: Sprite, load
+
 const kGAME_NAME = "Paddle Battle"
 const kSAFE_GAME_NAME = "PaddleBattle"
 const kBUNDLE_ORGANIZATION = "nhdalyMadeThis"
@@ -680,28 +683,23 @@ function render(scene::PauseScene, renderer, win)
     render(jlLogoIcon, jlLogoPos, cam, renderer; size=UIPixelDims(16,16))
 
     global knight_run_anim
-    knight_ss = load_bmp(renderer, "assets/knight_spritesheet.bmp")
+    knight_ss = Animations.load_bmp(renderer, "assets/knight_spritesheet.bmp")
     p, d = ScreenPixelPos(knight_pos...), ScreenPixelDims(knight_dims...)
     h = Vector2D(knight_dims[1], 0)
     v = Vector2D(0, knight_dims[2])
-    function make_knight_run_anim()
+
+    # Initialize
+    knight_run_anim === nothing && begin
         global knight_run_anim = Animation(
             [ Sprite(knight_ss, p + knight_run_offset*v + i*h, d) for i in 0:6],
-            knight_anim_delays, make_knight_run_anim,)
-    end
-    function make_knight_jump_anim()
+            [5 for _ in knight_anim_delays], loopanim_callback)
         global knight_jump_anim = Animation(
             [ Sprite(knight_ss, p + knight_jump_offset*v + i*h, d) for i in 0:6],
-            knight_anim_delays, make_knight_jump_anim,)
-    end
-    function make_knight_attack_anim()
+            knight_anim_delays, loopanim_callback)
         global knight_attack_anim = Animation(
             [ Sprite(knight_ss, p + 4*v + i*h, d) for i in 0:6],
-            knight_anim_delays, make_knight_attack_anim,)
+            knight_anim_delays, loopanim_callback)
     end
-    knight_run_anim === nothing && make_knight_run_anim()
-    knight_jump_anim === nothing && make_knight_jump_anim()
-    knight_attack_anim === nothing && make_knight_attack_anim()
     render(knight_run_anim, screenCenter() + Vector2D(-50,-200), cam, renderer, size=knight_display_scale)
     render(knight_jump_anim, screenCenter() + Vector2D(50,-200), cam, renderer, size=knight_display_scale)
     render(knight_attack_anim, screenCenter() + Vector2D(150,-200), cam, renderer, size=knight_display_scale)
