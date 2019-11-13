@@ -39,7 +39,7 @@ include("menu.jl")
 include("anim.jl")
 
 using .Animations
-using .Animations: Sprite, load
+using .Animations: Sprite
 
 const kGAME_NAME = "Paddle Battle"
 const kSAFE_GAME_NAME = "PaddleBattle"
@@ -633,6 +633,8 @@ function handleEvents!(scene::PauseScene, e,t)
     elseif (t == SDL2.MOUSEBUTTONUP || t == SDL2.MOUSEBUTTONDOWN)
         b = handleMouseClickButton!(e,t);
         if (b != nothing); run(b); end
+    elseif (t == SDL2.MOUSEMOTION)
+        handleMouseMotion_Pause(e)
     elseif (t == SDL2.QUIT);
         playing[]=false; paused[]=false;
     end
@@ -692,7 +694,7 @@ function render(scene::PauseScene, renderer, win)
     knight_run_anim === nothing && begin
         global knight_run_anim = Animation(
             [ Sprite(knight_ss, p + knight_run_offset*v + i*h, d) for i in 0:6],
-            [5 for _ in knight_anim_delays], loopanim_callback)
+            knight_anim_delays, loopanim_callback)
         global knight_jump_anim = Animation(
             [ Sprite(knight_ss, p + knight_jump_offset*v + i*h, d) for i in 0:6],
             knight_anim_delays, loopanim_callback)
@@ -703,25 +705,43 @@ function render(scene::PauseScene, renderer, win)
     render(knight_run_anim, screenCenter() + Vector2D(-50,-200), cam, renderer, size=knight_display_scale)
     render(knight_jump_anim, screenCenter() + Vector2D(50,-200), cam, renderer, size=knight_display_scale)
     render(knight_attack_anim, screenCenter() + Vector2D(150,-200), cam, renderer, size=knight_display_scale)
+
+    render(knight_attack_anim, screenCenter() + Vector2D(150,-200), cam, renderer, size=knight_display_scale)
+    for (pos, anim) in heart_anims
+        render(anim, pos, cam, renderer, size=1)
+    end
 end
 function performUpdates!(scene::PauseScene, dt)
     update!(knight_run_anim, dt)
     update!(knight_jump_anim, dt)
     update!(knight_attack_anim, dt)
+    for (pos, anim) in heart_anims
+        update!(anim, dt)
+    end
 end
+
+struct HeartFrame
+    size::Float32
+end
+function render(f::HeartFrame, args...; kwargs...)
+    render(heartIcon, args...; kwargs..., size=f.size)
+end
+
+heart_anims = Tuple{AbstractPos,Animation}[]
 
 clickedButton = nothing
 function handleMouseClickButton!(e, clickType)
     global clickedButton
     mx = bitcat(UInt32, e[24:-1:21])
     my = bitcat(UInt32, e[28:-1:25])
+    mouse_pos = UIPixelPos(mx,my)
     mButton = e[17]
     if mButton != SDL2.BUTTON_LEFT
         return
     end
     didClickButton = false
     for b in values(buttons)
-        if mouseOnButton(UIPixelPos(mx,my),b,cam)
+        if mouseOnButton(mouse_pos,b,cam)
             if (clickType == SDL2.MOUSEBUTTONDOWN)
                 clickedButton = b
                 didClickButton = true
@@ -736,8 +756,20 @@ function handleMouseClickButton!(e, clickType)
     if clickedButton != nothing && clickType == SDL2.MOUSEBUTTONUP && didClickButton == false
         clickedButton = nothing
     end
+
     return nothing
 end
+
+function handleMouseMotion_Pause(e)
+    mx = bitcat(UInt32, e[24:-1:21])
+    my = bitcat(UInt32, e[28:-1:25])
+    mouse_pos = UIPixelPos(mx,my)
+    # TODO: lol remove this silly glitter
+    pulse_sizes = 2.0*sin.(range(0.1, stop=0.9π, length=10))
+    pushfirst!(heart_anims,
+            (mouse_pos, Animation(HeartFrame.(pulse_sizes), fill(0.1,10), (_...)->pop!(heart_anims))))
+end
+
 
 function mouseOnButton(m::UIPixelPos, b::CheckboxButton, cam)
     return mouseOnButton(m, b.button, cam)

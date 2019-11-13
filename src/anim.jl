@@ -9,6 +9,9 @@ using ..RPG: SDL2, AbstractPos, Camera
 # For Sprite
 using ..RPG: ScreenPixelPos, ScreenPixelDims
 
+# No-op callback
+noop(_...) = nothing
+
 """
     Animation(frames, delays[, donecallback])
 
@@ -30,7 +33,7 @@ mutable struct Animation
     cur_frame_delay::Float32
     completed::Bool
 
-    function Animation(frames, delays, donecallback = (a,dt)->nothing)
+    function Animation(frames, delays, donecallback = noop)
         @assert length(frames) == length(delays)
         reset_anim!(new(frames, delays, donecallback))
     end
@@ -74,6 +77,7 @@ function RPG.update!(a::Animation, dt)
     end
 end
 
+# -----------------------------------------------------------------------------------------
 
 struct Sprite
     img::Ptr{SDL2.Texture}

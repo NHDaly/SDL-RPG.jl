@@ -91,7 +91,7 @@ end
     end
 end
 
-@testset "Animation donecallback" begin
+@testset "looping" begin
     looping = Animation([MockFrame(x) for x in 1:3], [1,1,1], loopanim_callback)
     # Jump to last frame
     RPG.update!(looping, 2)
