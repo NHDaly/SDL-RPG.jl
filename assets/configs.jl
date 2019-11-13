@@ -7,6 +7,7 @@
 
 defaultFontName = "assets/fonts/FiraCode/ttf/FiraCode-Regular.ttf"
 defaultFontSize = 26
+SDLGamesLib.set_default_font(defaultFontName, defaultFontSize)
 
 minWinWidth = Int32(20)  # basically 0.
 minWinHeight = Int32(425)  # Prevent getting any smaller than this.

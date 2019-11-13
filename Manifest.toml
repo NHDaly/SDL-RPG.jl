@@ -7,9 +7,11 @@ uuid = "f9309374-59cc-5ff5-a120-e3e470a57b4a"
 version = "0.4.0"
 
 [[ApplicationBuilderAppUtils]]
-git-tree-sha1 = "4b6604ca950ec7c1c96341349f552376f3541092"
+git-tree-sha1 = "b3e9cc215572624bbfd9dcc8ed8efe21c70295ed"
+repo-rev = "master"
+repo-url = "https://github.com/NHDaly/ApplicationBuilderAppUtils.jl"
 uuid = "96374992-6a10-11e9-2fa0-73472aac04df"
-version = "0.1.1"
+version = "0.1.2"
 
 [[ArgParse]]
 deps = ["Compat", "Test", "TextWrap"]

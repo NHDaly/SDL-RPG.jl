@@ -832,6 +832,6 @@ Base.@ccallable function julia_main(ARGS::Vector{String})::Cint
     game_main(ARGS)
 end
 
-# julia_main([""])  # no julia_main if currently compiling.
+# julia_main()  # no julia_main if currently compiling.
 
 end
