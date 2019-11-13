@@ -36,10 +36,9 @@ include("game.jl")
 include("display.jl")
 include("keyboard.jl")
 include("menu.jl")
-include("anim.jl")
 
-using .Animations
-using .Animations: Sprite
+using SDLGamesLib.Animations
+using SDLGamesLib.Animations: Sprite
 
 const kGAME_NAME = "Paddle Battle"
 const kSAFE_GAME_NAME = "PaddleBattle"
@@ -828,6 +827,7 @@ function game_main(ARGS)
     end
         return 0
 end
+julia_main() = julia_main(String[])
 Base.@ccallable function julia_main(ARGS::Vector{String})::Cint
     game_main(ARGS)
 end
