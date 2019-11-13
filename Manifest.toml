@@ -7,9 +7,7 @@ uuid = "f9309374-59cc-5ff5-a120-e3e470a57b4a"
 version = "0.4.0"
 
 [[ApplicationBuilderAppUtils]]
-git-tree-sha1 = "b3e9cc215572624bbfd9dcc8ed8efe21c70295ed"
-repo-rev = "master"
-repo-url = "https://github.com/NHDaly/ApplicationBuilderAppUtils.jl"
+git-tree-sha1 = "da4e4832403a61aaab48a5ab476fdcc50432bb87"
 uuid = "96374992-6a10-11e9-2fa0-73472aac04df"
 version = "0.1.2"
 
